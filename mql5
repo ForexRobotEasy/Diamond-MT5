@@ -1,0 +1,107 @@
+mql5
+//+------------------------------------------------------------------+
+//|                                             Diamond MT5          |
+//|                            Developer's site: forexroboteasy.com  |
+//|                               Development by: Forex Robot Easy Team |
+//+------------------------------------------------------------------+
+
+// Global variables
+double LotSize = 0.1; // Initial lot size
+double TakeProfit = 50; // Take profit in pips
+double StopLoss = 50; // Stop loss in pips
+double MaxLotSize = 1.0; // Maximum lot size for trading
+double MinLotSize = 0.01; // Minimum lot size for trading
+int MagicNumber = 123456; // Unique identifier for trades
+int TrailingStop = 20; // Trailing stop value in pips
+int MaxAttempts = 5; // Maximum number of attempts for Martingale strategy
+double MartingaleFactor = 2; // Martingale factor for lot size increase
+
+//+------------------------------------------------------------------+
+//| Custom initialization function                                    |
+//+------------------------------------------------------------------+
+int OnInit()
+{
+    // Set recommended lot size
+    if (LotSize > 0.1)
+        Print('Recommended trading volume is 0.1 lot or less!');
+    
+    return(INIT_SUCCEEDED);
+}
+
+//+------------------------------------------------------------------+
+//| Custom deinitialization function                                  |
+//+------------------------------------------------------------------+
+void OnDeinit(const int reason)
+{
+    // Perform necessary cleanup tasks
+}
+
+//+------------------------------------------------------------------+
+//| Custom start function                                             |
+//+------------------------------------------------------------------+
+void OnTick()
+{
+    // Check for open trades
+    if (OrdersTotal() > 0)
+        return;
+    
+    // Perform Martingale strategy
+    double lot = LotSize;
+    double profit = 0;
+    int attempts = 0;
+    
+    while (attempts < MaxAttempts)
+    {
+        // Calculate stop loss based on take profit
+        double stopLoss = TakeProfit * MartingaleFactor;
+        
+        // Open trade with calculated lot size, take profit, and stop loss
+        int ticket = OrderSend(Symbol(), OP_BUY, lot, Ask, 0, Ask - stopLoss * Point, Ask + TakeProfit * Point, 'Diamond MT5', MagicNumber, 0, Blue);
+        
+        // Check if trade was opened successfully
+        if (ticket > 0)
+        {
+            attempts = 0; // Reset attempts counter
+            profit = 0; // Reset profit
+            lot *= MartingaleFactor; // Increase lot size for next trade
+            break;
+        }
+        else
+        {
+            attempts++; // Increment attempts counter
+            profit -= lot * stopLoss; // Calculate loss
+            
+            if (attempts == MaxAttempts)
+            {
+                // Maximum attempts reached, stop trading
+                Print('Max attempts reached, stopping trading!');
+                return;
+            }
+        }
+    }
+    
+    // Set the initial stop loss for the first trade
+    double initialStopLoss = NormalizeDouble(Ask - StopLoss * Point, Digits);
+    bool stopLossSet = OrderModify(ticket, OrderOpenPrice(), initialStopLoss, OrderTakeProfit(), 0, Green);
+    
+    if (!stopLossSet)
+    {
+        // Failed to set stop loss, close the trade
+        OrderClose(ticket, lot, Bid, 0, Red);
+        Print('Failed to set stop loss, closing the trade!');
+        return;
+    }
+    
+    // Set trailing stop
+    bool trailingStopSet = OrderModify(ticket, OrderOpenPrice(), OrderStopLoss(), Bid + TrailingStop * Point, 0, Green);
+    
+    if (!trailingStopSet)
+    {
+        // Failed to set trailing stop, close the trade
+        OrderClose(ticket, lot, Bid, 0, Red);
+        Print('Failed to set trailing stop, closing the trade!');
+        return;
+    }
+}
+
+//+------------------------------------------------------------------+
